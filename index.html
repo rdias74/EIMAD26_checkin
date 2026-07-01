@@ -106,8 +106,7 @@
   <script>
     // ⚠️ SUBSTITUIR pelo URL do teu Web App do Apps Script
     // (Implementar → Gerir implementações → copiar o URL que termina em /exec)
-    // const API_URL = 'COLOCA_AQUI_O_URL_DO_TEU_WEB_APP/exec';
-    const API_URL = 'https://script.google.com/macros/s/AKfycbwVc4R_NrX4bYNxePDzulrqkRDzlmI9YOuCMOIIhsYChKIIMBnbIj4UM5e4M5jOe9x67g/exec';
+    const API_URL = 'COLOCA_AQUI_O_URL_DO_TEU_WEB_APP/exec';
 
     let html5QrCode = null;
     let scannerAtivo = false;
@@ -203,6 +202,7 @@
           if (resposta.sucesso) {
             mostrarResultado('sucesso', '✅ ' + resposta.nome + '<br><small>' + resposta.mensagem + '</small>');
             vibrar();
+            tocarBeep();
           } else if (resposta.jaRegistado) {
             mostrarResultado('aviso', '⚠️ ' + resposta.mensagem);
           } else {
@@ -223,6 +223,31 @@
 
     function vibrar() {
       if (navigator.vibrate) navigator.vibrate(150);
+    }
+
+    // Gera um pequeno "beep" sem precisar de nenhum ficheiro de som.
+    // Nota: o iPhone/Safari só permite som depois de uma interação do
+    // utilizador (ex: tocar no ecrã) — como o utilizador já selecionou
+    // a sessão no dropdown antes disto, essa interação já aconteceu.
+    let audioCtx = null;
+    function tocarBeep() {
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880; // tom agudo, tipo "bip" de sucesso
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.2);
+      } catch (err) {
+        console.error('Não foi possível tocar o som:', err);
+      }
     }
   </script>
 </body>
