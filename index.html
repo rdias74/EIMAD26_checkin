@@ -109,6 +109,7 @@
     //const API_URL = 'COLOCA_AQUI_O_URL_DO_TEU_WEB_APP/exec';
     const API_URL = 'https://script.google.com/macros/s/AKfycbyBOsP6lVQxADtntkbByF5NcUNphMZLPmc_kIsVpvrOgsJoekdqZkI5cLCpnW6a4a4mYg/exec';
 
+
     let html5QrCode = null;
     let scannerAtivo = false;
     let ultimoCodigo = null;
@@ -142,12 +143,6 @@
     }
 
     document.getElementById('sessaoSelect').addEventListener('change', function(e) {
-      // Cria/destrava o AudioContext AQUI, dentro de uma interação direta
-      // do utilizador — o Safari no iPhone só permite tocar som se o
-      // contexto for iniciado assim; criá-lo mais tarde (ex: só quando
-      // o registo tem sucesso) não funciona.
-      destravarAudio();
-
       if (e.target.value) {
         document.getElementById('avisoSessao').classList.add('escondido');
         iniciarScanner();
@@ -237,6 +232,18 @@
     // utilizador (ex: tocar no ecrã) — como o utilizador já selecionou
     // a sessão no dropdown antes disto, essa interação já aconteceu.
     let audioCtx = null;
+
+    // O iOS/Safari só desbloqueia o som numa interação "direta" do
+    // utilizador (toque/clique). O evento 'change' de um <select> nem
+    // sempre conta como suficientemente direto no iOS, por isso
+    // desbloqueamos ao primeiro toque em qualquer parte da página.
+    function desbloquearAoPrimeiroToque() {
+      destravarAudio();
+      document.removeEventListener('touchend', desbloquearAoPrimeiroToque);
+      document.removeEventListener('click', desbloquearAoPrimeiroToque);
+    }
+    document.addEventListener('touchend', desbloquearAoPrimeiroToque);
+    document.addEventListener('click', desbloquearAoPrimeiroToque);
 
     function destravarAudio() {
       if (!audioCtx) {
