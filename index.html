@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Controlo de Visitantes</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    :root {
+      --azul: #1a73e8;
+      --verde: #1e8e3e;
+      --vermelho: #d93025;
+      --cinza: #5f6368;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: #f4f6f8;
+      color: #202124;
+      max-width: 480px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    h1 {
+      font-size: 20px;
+      text-align: center;
+      margin: 8px 0 16px;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--cinza);
+      margin-bottom: 6px;
+    }
+    select {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #dadce0;
+      background: white;
+    }
+    #reader {
+      width: 100%;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    #resultado {
+      min-height: 90px;
+      border-radius: 10px;
+      padding: 16px;
+      text-align: center;
+      font-size: 17px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s ease;
+      background: #e8eaed;
+      color: var(--cinza);
+    }
+    #resultado.sucesso { background: #e6f4ea; color: var(--verde); }
+    #resultado.erro { background: #fce8e6; color: var(--vermelho); }
+    #resultado.aviso { background: #fef7e0; color: #b06000; }
+    .escondido { display: none !important; }
+    .aviso-sessao {
+      text-align: center;
+      color: var(--cinza);
+      padding: 24px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>📋 Controlo de Visitantes</h1>
+
+  <div class="card">
+    <label for="sessaoSelect">Sessão atual</label>
+    <select id="sessaoSelect">
+      <option value="">A carregar sessões...</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <div id="reader"></div>
+    <div id="avisoSessao" class="aviso-sessao">
+      Seleciona uma sessão acima para ativar a câmara.
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="resultado">Aguardando leitura...</div>
+  </div>
+
+  <script>
+    // ⚠️ SUBSTITUIR pelo URL do teu Web App do Apps Script
+    // (Implementar → Gerir implementações → copiar o URL que termina em /exec)
+    const API_URL = 'COLOCA_AQUI_O_URL_DO_TEU_WEB_APP/exec';
+
+    let html5QrCode = null;
+    let scannerAtivo = false;
+    let ultimoCodigo = null;
+    let ultimoTempo = 0;
+    const COOLDOWN_MS = 3000; // evita registar o mesmo código repetidamente
+
+    // --- Carregar sessões da API ---
+    fetch(API_URL + '?action=sessoes')
+      .then(function(res) { return res.json(); })
+      .then(function(resposta) {
+        if (resposta.sucesso) {
+          preencherSessoes(resposta.sessoes);
+        } else {
+          mostrarResultado('erro', '❌ Erro ao carregar sessões.');
+        }
+      })
+      .catch(function(err) {
+        mostrarResultado('erro', '❌ Não foi possível ligar à API. Verifica o API_URL.');
+        console.error(err);
+      });
+
+    function preencherSessoes(sessoes) {
+      const select = document.getElementById('sessaoSelect');
+      select.innerHTML = '<option value="">-- Escolhe a sessão --</option>';
+      sessoes.forEach(function(s) {
+        const opt = document.createElement('option');
+        opt.value = s.nome;
+        opt.textContent = s.nome;
+        select.appendChild(opt);
+      });
+    }
+
+    document.getElementById('sessaoSelect').addEventListener('change', function(e) {
+      if (e.target.value) {
+        document.getElementById('avisoSessao').classList.add('escondido');
+        iniciarScanner();
+      } else {
+        pararScanner();
+        document.getElementById('avisoSessao').classList.remove('escondido');
+      }
+    });
+
+    function iniciarScanner() {
+      if (scannerAtivo) return;
+      html5QrCode = new Html5Qrcode("reader");
+
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        onScanSuccess
+      ).then(function() {
+        scannerAtivo = true;
+      }).catch(function(err) {
+        mostrarResultado('erro', 'Não foi possível aceder à câmara: ' + err);
+      });
+    }
+
+    function pararScanner() {
+      if (scannerAtivo && html5QrCode) {
+        html5QrCode.stop().then(function() {
+          html5QrCode.clear();
+          scannerAtivo = false;
+        }).catch(function() {});
+      }
+    }
+
+    function onScanSuccess(decodedText) {
+      const agora = Date.now();
+      if (decodedText === ultimoCodigo && (agora - ultimoTempo) < COOLDOWN_MS) {
+        return;
+      }
+      ultimoCodigo = decodedText;
+      ultimoTempo = agora;
+
+      const sessao = document.getElementById('sessaoSelect').value;
+      mostrarResultado('', 'A verificar...');
+
+      // Nota: content-type 'text/plain' propositadamente, para o pedido
+      // POST não disparar um "preflight" CORS (OPTIONS) que o Apps
+      // Script não responde corretamente.
+      fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'registarEntrada',
+          id: decodedText,
+          sessao: sessao
+        })
+      })
+        .then(function(res) { return res.json(); })
+        .then(function(resposta) {
+          if (resposta.sucesso) {
+            mostrarResultado('sucesso', '✅ ' + resposta.nome + '<br><small>' + resposta.mensagem + '</small>');
+            vibrar();
+          } else if (resposta.jaRegistado) {
+            mostrarResultado('aviso', '⚠️ ' + resposta.mensagem);
+          } else {
+            mostrarResultado('erro', '❌ ' + resposta.mensagem);
+          }
+        })
+        .catch(function(err) {
+          mostrarResultado('erro', '❌ Erro de ligação à API.');
+          console.error(err);
+        });
+    }
+
+    function mostrarResultado(tipo, mensagemHtml) {
+      const div = document.getElementById('resultado');
+      div.className = tipo;
+      div.innerHTML = mensagemHtml;
+    }
+
+    function vibrar() {
+      if (navigator.vibrate) navigator.vibrate(150);
+    }
+  </script>
+</body>
+</html>
